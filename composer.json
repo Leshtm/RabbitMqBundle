@@ -9,14 +9,14 @@
         "name" : "Leshtm"
     }],
     "require": {
-        "php":                          "^7.1",
+        "php":                          "^7.1|^8.0",
 
         "symfony/dependency-injection": "^4.3|^5.0",
         "symfony/event-dispatcher":     "^4.3|^5.0",
-        "symfony/config":               "^4.3|^5.00",
+        "symfony/config":               "^4.3|^5.0",
         "symfony/yaml":                 "^4.3|^5.0",
         "symfony/console":              "^4.3|^5.0",
-        "php-amqplib/php-amqplib":      "^2.6",
+        "my-php-amqplib/php-amqplib":      "^2.6",
         "psr/log":                      "^1.0"
     },
     "require-dev": {
@@ -24,6 +24,20 @@
         "symfony/debug":                "^4.3|^5.0",
         "phpunit/phpunit":              "^4.8.35|^5.4.3"
     },
+    "repositories": [
+        {
+            "type":"package",
+            "package": {
+                "name": "my-php-amqplib/php-amqplib",
+                "version":"2.12",
+                "source": {
+                    "url": "https://github.com/Leshtm/php-amqplib.git",
+                    "type": "git",
+                    "reference":"master"
+                }
+            }
+        }
+    ],
     "replace": {
         "oldsound/rabbitmq-bundle": "self.version"
     },
