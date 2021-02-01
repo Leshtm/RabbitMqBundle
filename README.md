@@ -1,7 +1,5 @@
 # RabbitMqBundle #
 
-[![Join the chat at https://gitter.im/php-amqplib/RabbitMqBundle](https://badges.gitter.im/php-amqplib/RabbitMqBundle.svg)](https://gitter.im/php-amqplib/RabbitMqBundle?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-
 ## About ##
 
 The RabbitMqBundle incorporates messaging in your application via [RabbitMQ](http://www.rabbitmq.com/) using the [php-amqplib](http://github.com/php-amqplib/php-amqplib) library.
@@ -23,16 +21,18 @@ All the examples expect a running RabbitMQ server.
 
 This bundle was presented at [Symfony Live Paris 2011](http://www.symfony-live.com/paris/schedule#session-av1) conference. See the slides [here](http://www.slideshare.net/old_sound/theres-a-rabbit-on-my-symfony).
 
-[![Build Status](https://secure.travis-ci.org/php-amqplib/RabbitMqBundle.png?branch=master)](http://travis-ci.org/php-amqplib/RabbitMqBundle)
+## Version 2 ##
+Due to the breaking changes happened caused by Symfony >=4.4, a new tag was released, making the bundle compatible with Symfony >=4.4.
+Also it eliminates a lot notices caused by symfony event dispatcher in Symfony 4.3.
 
 ## Installation ##
 
-### For Symfony Framework >= 2.3 ###
+### For Symfony Framework >= 4.3 ###
 
 Require the bundle and its dependencies with composer:
 
 ```bash
-$ composer require php-amqplib/rabbitmq-bundle
+$ composer require emag-tech-labs/rabbitmq-bundle
 ```
 
 Register the bundle:
@@ -60,7 +60,7 @@ Require the bundle in your composer.json file:
 ```
 {
     "require": {
-        "php-amqplib/rabbitmq-bundle": "~1.6",
+        "emag-tech-labs/rabbitmq-bundle": "^2.0",
     }
 }
 ```
@@ -173,7 +173,7 @@ queue_options:
 
 ### Important notice - Lazy Connections ###
 
-In a Symfony environment all services are fully bootstrapped for each request, from version >= 2.3 you can declare
+In a Symfony environment all services are fully bootstrapped for each request, from version >= 4.3 you can declare
 a service as lazy ([Lazy Services](http://symfony.com/doc/master/components/dependency_injection/lazy_services.html)).
 This bundle still doesn't support new Lazy Services feature but you can set `lazy: true` in your connection
 configuration to avoid unnecessary connections to your message broker in every request.
@@ -427,6 +427,23 @@ consumers:
         callback:               upload_picture_service
         idle_timeout:           60
         idle_timeout_exit_code: 0
+```
+
+#### Timeout wait ####
+
+Set the `timeout_wait` in seconds.
+The `timeout_wait` specifies how long the consumer will wait without receiving a new message before ensuring the current connection is still valid.
+
+```yaml
+consumers:
+    upload_picture:
+        connection:             default
+        exchange_options:       {name: 'upload-picture', type: direct}
+        queue_options:          {name: 'upload-picture'}
+        callback:               upload_picture_service
+        idle_timeout:           60
+        idle_timeout_exit_code: 0
+        timeout_wait:           10
 ```
 
 #### Graceful max execution timeout ####
@@ -890,6 +907,8 @@ How to run the following batch consumer:
 ```
 
 Important: BatchConsumers will not have the -m|messages option available
+Important: BatchConsumers can also have the -b|batches option available if you want to only consume a specific number of batches and then stop the consumer.
+! Give the number of the batches only if you want the consumer to stop after those batch messages were consumed.! 
 
 ### STDIN Producer ###
 

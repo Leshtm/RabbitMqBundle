@@ -13,7 +13,7 @@ class MultipleConsumer extends Consumer
     /**
      * Queues provider
      *
-     * @var QueuesProviderInterface
+     * @var QueuesProviderInterface|null
      */
     protected $queuesProvider = null;
     
@@ -80,10 +80,10 @@ class MultipleConsumer extends Consumer
 
             if (isset($options['routing_keys']) && count($options['routing_keys']) > 0) {
                 foreach ($options['routing_keys'] as $routingKey) {
-                    $this->queueBind($queueName, $this->exchangeOptions['name'], $routingKey);
+                    $this->queueBind($queueName, $this->exchangeOptions['name'], $routingKey, $options['arguments'] ?? []);
                 }
             } else {
-                $this->queueBind($queueName, $this->exchangeOptions['name'], $this->routingKey);
+                $this->queueBind($queueName, $this->exchangeOptions['name'], $this->routingKey, $options['arguments'] ?? []);
             }
         }
 
@@ -114,7 +114,7 @@ class MultipleConsumer extends Consumer
         if ($this->queuesProvider) {
             $this->queues = array_merge(
                 $this->queues,
-                $this->queuesProvider->getQueues($this->context)
+                $this->queuesProvider->getQueues()
             );
         }
     }

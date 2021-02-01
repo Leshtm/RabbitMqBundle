@@ -367,6 +367,10 @@ class OldSoundRabbitMqExtensionTest extends TestCase
                 array(
                     'setCallback',
                     array(array(new Reference('foo.callback'), 'execute'))
+                ),
+                array(
+                    'setTimeoutWait',
+                    array(3)
                 )
             ),
             $definition->getMethodCalls()
@@ -442,7 +446,7 @@ class OldSoundRabbitMqExtensionTest extends TestCase
             }
         }
 
-        $this->assertInternalType('array', $setQosParameters);
+        $this->assertIsArray($setQosParameters);
         $this->assertEquals(
             array(
                 1024,
@@ -518,6 +522,10 @@ class OldSoundRabbitMqExtensionTest extends TestCase
                     array(
                         new Reference('foo.queues_provider')
                     )
+                ),
+                array(
+                    'setTimeoutWait',
+                    array(3)
                 )
             ),
             $definition->getMethodCalls()

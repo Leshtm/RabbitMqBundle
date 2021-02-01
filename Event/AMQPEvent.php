@@ -4,7 +4,7 @@ namespace OldSound\RabbitMqBundle\Event;
 
 use OldSound\RabbitMqBundle\RabbitMq\Consumer;
 use PhpAmqpLib\Message\AMQPMessage;
-use Zend\EventManager\Event;
+use Symfony\Component\EventDispatcher\Event;
 
 /**
  * Class AMQPEvent
@@ -12,7 +12,7 @@ use Zend\EventManager\Event;
  * @package OldSound\RabbitMqBundle\Event
  * @codeCoverageIgnore
  */
-class AMQPEvent extends Event
+class AMQPEvent extends AbstractAMQPEvent
 {
     const ON_CONSUME                = 'on_consume';
     const ON_IDLE                   = 'on_idle';

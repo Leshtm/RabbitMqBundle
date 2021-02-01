@@ -8,6 +8,8 @@ use OldSound\RabbitMqBundle\RabbitMq\MultipleConsumer;
 use PhpAmqpLib\Channel\AMQPChannel;
 use PhpAmqpLib\Connection\AMQPConnection;
 use PhpAmqpLib\Message\AMQPMessage;
+use PHPUnit\Framework\Assert;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
 class MultipleConsumerTest extends TestCase
@@ -22,14 +24,14 @@ class MultipleConsumerTest extends TestCase
     /**
      * AMQP channel
      *
-     * @var \PHPUnit_Framework_MockObject_MockObject|AMQPChannel
+     * @var MockObject|AMQPChannel
      */
     private $amqpChannel;
 
     /**
      * AMQP connection
      *
-     * @var \PHPUnit_Framework_MockObject_MockObject|AMQPConnection
+     * @var MockObject|AMQPConnection
      */
     private $amqpConnection;
 
@@ -38,7 +40,7 @@ class MultipleConsumerTest extends TestCase
      *
      * @return void
      */
-    public function setUp()
+    public function setUp(): void
     {
         $this->amqpConnection = $this->prepareAMQPConnection();
         $this->amqpChannel = $this->prepareAMQPChannel();
@@ -199,9 +201,61 @@ class MultipleConsumerTest extends TestCase
     }
 
     /**
+     * @dataProvider queueBindingRoutingKeyProvider
+     */
+    public function testShouldConsiderQueueArgumentsOnQueueDeclaration($routingKeysOption, $expectedRoutingKey)
+    {
+        $queueName = 'test-queue-name';
+        $exchangeName = 'test-exchange-name';
+        $expectedArgs = ['test-argument' => ['S', 'test-value']];
+
+        $this->amqpChannel->expects($this->any())
+            ->method('getChannelId')->willReturn(0);
+
+        $this->amqpChannel->expects($this->any())
+            ->method('queue_declare')
+            ->willReturn([$queueName, 5, 0]);
+
+
+        $this->multipleConsumer->setExchangeOptions([
+            'declare' => false,
+            'name' => $exchangeName,
+            'type' => 'topic']);
+
+        $this->multipleConsumer->setQueues([
+            $queueName => [
+                'passive' => true,
+                'durable' => true,
+                'exclusive' => true,
+                'auto_delete' => true,
+                'nowait' => true,
+                'arguments' => $expectedArgs,
+                'ticket' => null,
+                'routing_keys' => $routingKeysOption]
+        ]);
+
+        $this->multipleConsumer->setRoutingKey('test-routing-key');
+
+        // we assert that arguments are passed to the bind method
+        $this->amqpChannel->expects($this->once())
+            ->method('queue_bind')
+            ->with($queueName, $exchangeName, $expectedRoutingKey, false, $expectedArgs);
+
+        $this->multipleConsumer->setupFabric();
+    }
+
+    public function queueBindingRoutingKeyProvider()
+    {
+        return array(
+            array(array(), 'test-routing-key'),
+            array(array('test-routing-key-2'), 'test-routing-key-2'),
+        );
+    }
+
+    /**
      * Preparing AMQP Connection
      *
-     * @return \PHPUnit_Framework_MockObject_MockObject|AMQPConnection
+     * @return MockObject|AMQPConnection
      */
     private function prepareAMQPConnection()
     {
@@ -213,7 +267,7 @@ class MultipleConsumerTest extends TestCase
     /**
      * Preparing AMQP Connection
      *
-     * @return \PHPUnit_Framework_MockObject_MockObject|AMQPChannel
+     * @return MockObject|AMQPChannel
      */
     private function prepareAMQPChannel()
     {
@@ -225,7 +279,7 @@ class MultipleConsumerTest extends TestCase
     /**
      * Preparing QueuesProviderInterface instance
      *
-     * @return \PHPUnit_Framework_MockObject_MockObject|QueuesProviderInterface
+     * @return MockObject|QueuesProviderInterface
      */
     private function prepareQueuesProvider()
     {
@@ -236,8 +290,8 @@ class MultipleConsumerTest extends TestCase
     /**
      * Preparing AMQP Channel Expectations
      *
-     * @param $expectedMethod
-     * @param $expectedRequeue
+     * @param mixed $expectedMethod
+     * @param string $expectedRequeue
      *
      * @return void
      */
@@ -245,27 +299,27 @@ class MultipleConsumerTest extends TestCase
     {
         $this->amqpChannel->expects($this->any())
             ->method('basic_reject')
-            ->will($this->returnCallback(function($delivery_tag, $requeue) use ($expectedMethod, $expectedRequeue) {
-                \PHPUnit_Framework_Assert::assertSame($expectedMethod, 'basic_reject'); // Check if this function should be called.
-                \PHPUnit_Framework_Assert::assertSame($requeue, $expectedRequeue); // Check if the message should be requeued.
+            ->will($this->returnCallback(function ($delivery_tag, $requeue) use ($expectedMethod, $expectedRequeue) {
+                Assert::assertSame($expectedMethod, 'basic_reject'); // Check if this function should be called.
+                Assert::assertSame($requeue, $expectedRequeue); // Check if the message should be requeued.
             }));
 
         $this->amqpChannel->expects($this->any())
             ->method('basic_ack')
-            ->will($this->returnCallback(function($delivery_tag) use ($expectedMethod) {
-                \PHPUnit_Framework_Assert::assertSame($expectedMethod, 'basic_ack'); // Check if this function should be called.
+            ->will($this->returnCallback(function ($delivery_tag) use ($expectedMethod) {
+                Assert::assertSame($expectedMethod, 'basic_ack'); // Check if this function should be called.
             }));
     }
 
     /**
      * Prepare callback
      *
-     * @param $processFlag
+     * @param bool $processFlag
      * @return callable
      */
     private function prepareCallback($processFlag)
     {
-        return function($msg) use (&$lastQueue, $processFlag) {
+        return function ($msg) use ($processFlag) {
             return $processFlag;
         };
     }

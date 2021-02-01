@@ -7,10 +7,15 @@ use OldSound\RabbitMqBundle\Event\BeforeProcessingMessageEvent;
 use OldSound\RabbitMqBundle\Event\OnConsumeEvent;
 use OldSound\RabbitMqBundle\Event\OnIdleEvent;
 use OldSound\RabbitMqBundle\RabbitMq\Consumer;
+use PhpAmqpLib\Channel\AMQPChannel;
+use PhpAmqpLib\Connection\AMQPConnection;
 use PhpAmqpLib\Exception\AMQPTimeoutException;
 use PhpAmqpLib\Message\AMQPMessage;
 use OldSound\RabbitMqBundle\RabbitMq\ConsumerInterface;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Contracts\EventDispatcher\EventDispatcherInterface as ContractsEventDispatcherInterface;
 
 class ConsumerTest extends TestCase
 {
@@ -21,16 +26,16 @@ class ConsumerTest extends TestCase
 
     protected function prepareAMQPConnection()
     {
-        return $this->getMockBuilder('\PhpAmqpLib\Connection\AMQPConnection')
-                        ->disableOriginalConstructor()
-                        ->getMock();
+        return $this->getMockBuilder(AMQPConnection::class)
+            ->disableOriginalConstructor()
+            ->getMock();
     }
 
     protected function prepareAMQPChannel()
     {
-        return $this->getMockBuilder('\PhpAmqpLib\Channel\AMQPChannel')
-                        ->disableOriginalConstructor()
-                        ->getMock();
+        return $this->getMockBuilder(AMQPChannel::class)
+            ->disableOriginalConstructor()
+            ->getMock();
     }
 
     /**
@@ -44,7 +49,9 @@ class ConsumerTest extends TestCase
         $amqpChannel = $this->prepareAMQPChannel();
         $consumer = $this->getConsumer($amqpConnection, $amqpChannel);
 
-        $callbackFunction = function() use ($processFlag) { return $processFlag; }; // Create a callback function with a return value set by the data provider.
+        $callbackFunction = function () use ($processFlag) {
+            return $processFlag;
+        }; // Create a callback function with a return value set by the data provider.
         $consumer->setCallback($callbackFunction);
 
         // Create a default message
@@ -56,31 +63,38 @@ class ConsumerTest extends TestCase
             $amqpChannel->expects($this->any())
                 ->method('basic_reject')
                 ->will($this->returnCallback(function ($delivery_tag, $requeue) use ($expectedMethod, $expectedRequeue) {
-                    \PHPUnit_Framework_Assert::assertSame($expectedMethod, 'basic_reject'); // Check if this function should be called.
-                    \PHPUnit_Framework_Assert::assertSame($requeue, $expectedRequeue); // Check if the message should be requeued.
+                    Assert::assertSame($expectedMethod, 'basic_reject'); // Check if this function should be called.
+                    Assert::assertSame($requeue, $expectedRequeue); // Check if the message should be requeued.
                 }));
 
             $amqpChannel->expects($this->any())
                 ->method('basic_ack')
                 ->will($this->returnCallback(function ($delivery_tag) use ($expectedMethod) {
-                    \PHPUnit_Framework_Assert::assertSame($expectedMethod, 'basic_ack'); // Check if this function should be called.
+                    Assert::assertSame($expectedMethod, 'basic_ack'); // Check if this function should be called.
                 }));
         } else {
             $amqpChannel->expects($this->never())->method('basic_reject');
             $amqpChannel->expects($this->never())->method('basic_ack');
             $amqpChannel->expects($this->never())->method('basic_nack');
         }
-        $eventDispatcher = $this->getMockBuilder('Symfony\Component\EventDispatcher\EventDispatcherInterface')
+
+        $eventDispatcher = $this->getMockBuilder(EventDispatcherInterface::class)
+            ->disableOriginalConstructor()
             ->getMock();
+
         $consumer->setEventDispatcher($eventDispatcher);
 
         $eventDispatcher->expects($this->atLeastOnce())
             ->method('dispatch')
             ->withConsecutive(
-                array(BeforeProcessingMessageEvent::NAME, new BeforeProcessingMessageEvent($consumer, $amqpMessage)),
-                array(AfterProcessingMessageEvent::NAME, new AfterProcessingMessageEvent($consumer, $amqpMessage))
+                array(new BeforeProcessingMessageEvent($consumer, $amqpMessage), BeforeProcessingMessageEvent::NAME),
+                array(new AfterProcessingMessageEvent($consumer, $amqpMessage), AfterProcessingMessageEvent::NAME)
             )
-            ->willReturn(true);
+            ->willReturnOnConsecutiveCalls(
+                new BeforeProcessingMessageEvent($consumer, $amqpMessage),
+                new AfterProcessingMessageEvent($consumer, $amqpMessage)
+            );
+
         $consumer->processMessage($amqpMessage);
     }
 
@@ -102,7 +116,7 @@ class ConsumerTest extends TestCase
      */
     public function consumeProvider()
     {
-        $testCases[ "All ok 4 callbacks"] =  array(
+        $testCases["All ok 4 callbacks"] = array(
             array(
                 "messages" => array(
                     "msgCallback1",
@@ -113,10 +127,9 @@ class ConsumerTest extends TestCase
             )
         );
 
-        $testCases[ "No callbacks"] =  array(
+        $testCases["No callbacks"] = array(
             array(
-                "messages" => array(
-                )
+                "messages" => array()
             )
         );
 
@@ -126,9 +139,9 @@ class ConsumerTest extends TestCase
     /**
      * @dataProvider consumeProvider
      *
-     * @param $data
+     * @param array $data
      */
-    public function testConsume($data)
+    public function testConsume(array $data)
     {
         $consumerCallBacks = $data['messages'];
 
@@ -167,15 +180,14 @@ class ConsumerTest extends TestCase
                     })
             );
 
-        // set up event dispatcher
-        $eventDispatcher = $this->getMockBuilder('Symfony\Component\EventDispatcher\EventDispatcher')
+        $eventDispatcher = $this->getMockBuilder(EventDispatcherInterface::class)
             ->disableOriginalConstructor()
             ->getMock();
 
         $eventDispatcher->expects($this->exactly(count($consumerCallBacks)))
             ->method('dispatch')
-            ->with(OnConsumeEvent::NAME, $this->isInstanceOf('OldSound\RabbitMqBundle\Event\OnConsumeEvent'))
-            ->willReturn(true);
+            ->with($this->isInstanceOf(OnConsumeEvent::class), OnConsumeEvent::NAME)
+            ->willReturn($this->isInstanceOf(OnConsumeEvent::class));
 
         $consumer->setEventDispatcher($eventDispatcher);
         $consumer->consume(1);
@@ -201,13 +213,18 @@ class ConsumerTest extends TestCase
         // disable autosetup fabric so we do not mock more objects
         $consumer->disableAutoSetupFabric();
         $consumer->setChannel($amqpChannel);
+        $consumer->setIdleTimeout(60);
         $consumer->setIdleTimeoutExitCode(2);
         $amqpChannel->callbacks = array('idle_timeout_exit_code');
 
         $amqpChannel->expects($this->exactly(1))
             ->method('wait')
             ->with(null, false, $consumer->getIdleTimeout())
-            ->willThrowException(new AMQPTimeoutException());
+            ->willReturnCallback(function ($allowedMethods, $nonBlocking, $waitTimeout) use ($consumer) {
+                // simulate time passing by moving the last activity date time
+                $consumer->setLastActivityDateTime(new \DateTime("-$waitTimeout seconds"));
+                throw new AMQPTimeoutException();
+            });
 
         $this->assertTrue(2 == $consumer->consume(1));
     }
@@ -238,29 +255,37 @@ class ConsumerTest extends TestCase
         $amqpChannel->expects($this->exactly(2))
             ->method('wait')
             ->with(null, false, $consumer->getIdleTimeout())
-            ->willThrowException(new AMQPTimeoutException());
+            ->willReturnCallback(function ($allowedMethods, $nonBlocking, $waitTimeout) use ($consumer) {
+                // simulate time passing by moving the last activity date time
+                $consumer->setLastActivityDateTime(new \DateTime("-$waitTimeout seconds"));
+                throw new AMQPTimeoutException();
+            });
 
-        // set up event dispatcher
-        $eventDispatcher = $this->getMockBuilder('Symfony\Component\EventDispatcher\EventDispatcher')
+        $eventDispatcher = $this->getMockBuilder(EventDispatcherInterface::class)
             ->disableOriginalConstructor()
             ->getMock();
 
         $eventDispatcher->expects($this->at(1))
             ->method('dispatch')
-            ->with(OnIdleEvent::NAME, $this->isInstanceOf('OldSound\RabbitMqBundle\Event\OnIdleEvent'))
-            ->willReturnCallback(function($eventName, OnIdleEvent $event) {
+            ->with($this->isInstanceOf(OnIdleEvent::class), OnIdleEvent::NAME)
+            ->willReturnCallback(function (OnIdleEvent $event, $eventName) {
                 $event->setForceStop(false);
+
+                return $event;
             });
+
         $eventDispatcher->expects($this->at(3))
             ->method('dispatch')
-            ->with(OnIdleEvent::NAME, $this->isInstanceOf('OldSound\RabbitMqBundle\Event\OnIdleEvent'))
-            ->willReturn(function($eventName, OnIdleEvent $event) {
+            ->with($this->isInstanceOf(OnIdleEvent::class), OnIdleEvent::NAME)
+            ->willReturnCallback(function (OnIdleEvent $event, $eventName) {
                 $event->setForceStop(true);
-        });
+
+                return $event;
+            });
 
         $consumer->setEventDispatcher($eventDispatcher);
 
-        $this->setExpectedException('PhpAmqpLib\Exception\AMQPTimeoutException');
+        $this->expectException(AMQPTimeoutException::class);
         $consumer->consume(10);
     }
 
@@ -291,7 +316,11 @@ class ConsumerTest extends TestCase
 
         $amqpChannel->expects($this->exactly(1))
             ->method('wait')
-            ->willThrowException(new AMQPTimeoutException());
+            ->willReturnCallback(function ($allowedMethods, $nonBlocking, $waitTimeout) use ($consumer) {
+                // simulate time passing by moving the max execution date time
+                $consumer->setGracefulMaxExecutionDateTimeFromSecondsInTheFuture($waitTimeout * -1);
+                throw new AMQPTimeoutException();
+            });
 
         $this->assertSame(10, $consumer->consume(1));
     }
@@ -324,5 +353,122 @@ class ConsumerTest extends TestCase
             ->method('wait');
 
         $consumer->consume(1);
+    }
+
+    public function testTimeoutWait()
+    {
+        // set up amqp connection
+        $amqpConnection = $this->prepareAMQPConnection();
+        // set up amqp channel
+        $amqpChannel = $this->prepareAMQPChannel();
+        $amqpChannel->expects($this->atLeastOnce())
+            ->method('getChannelId')
+            ->with()
+            ->willReturn(true);
+        $amqpChannel->expects($this->once())
+            ->method('basic_consume')
+            ->withAnyParameters()
+            ->willReturn(true);
+
+        // set up consumer
+        $consumer = $this->getConsumer($amqpConnection, $amqpChannel);
+        // disable autosetup fabric so we do not mock more objects
+        $consumer->disableAutoSetupFabric();
+        $consumer->setChannel($amqpChannel);
+        $consumer->setTimeoutWait(30);
+        $consumer->setGracefulMaxExecutionDateTimeFromSecondsInTheFuture(60);
+        $consumer->setIdleTimeout(50);
+
+        $amqpChannel->callbacks = array('timeout_wait_test');
+
+        $amqpChannel->expects($this->exactly(2))
+            ->method('wait')
+            ->with(null, false, $this->LessThanOrEqual($consumer->getTimeoutWait()) )
+            ->willReturnCallback(function ($allowedMethods, $nonBlocking, $waitTimeout) use ($consumer) {
+                // ensure max execution date time "counts down"
+                $consumer->setGracefulMaxExecutionDateTime(
+                    $consumer->getGracefulMaxExecutionDateTime()->modify("-$waitTimeout seconds")
+                );
+                // ensure last activity just occurred so idle timeout is not reached
+                $consumer->setLastActivityDateTime(new \DateTime());
+                throw new AMQPTimeoutException();
+            });
+
+        $consumer->consume(1);
+    }
+
+    public function testTimeoutWaitWontWaitPastGracefulMaxExecutionTimeout()
+    {
+        // set up amqp connection
+        $amqpConnection = $this->prepareAMQPConnection();
+        // set up amqp channel
+        $amqpChannel = $this->prepareAMQPChannel();
+        $amqpChannel->expects($this->atLeastOnce())
+            ->method('getChannelId')
+            ->with()
+            ->willReturn(true);
+        $amqpChannel->expects($this->once())
+            ->method('basic_consume')
+            ->withAnyParameters()
+            ->willReturn(true);
+
+        // set up consumer
+        $consumer = $this->getConsumer($amqpConnection, $amqpChannel);
+        // disable autosetup fabric so we do not mock more objects
+        $consumer->disableAutoSetupFabric();
+        $consumer->setChannel($amqpChannel);
+        $consumer->setTimeoutWait(20);
+
+        $consumer->setGracefulMaxExecutionDateTimeFromSecondsInTheFuture(10);
+        $amqpChannel->callbacks = array('graceful_max_execution_timeout_test');
+
+        $amqpChannel->expects($this->once())
+            ->method('wait')
+            ->with(null, false, $consumer->getGracefulMaxExecutionDateTime()->diff(new \DateTime())->s)
+            ->willReturnCallback(function ($allowedMethods, $nonBlocking, $waitTimeout) use ($consumer) {
+                // simulate time passing by moving the max execution date time
+                $consumer->setGracefulMaxExecutionDateTimeFromSecondsInTheFuture($waitTimeout * -1);
+                throw new AMQPTimeoutException();
+            });
+
+        $consumer->consume(1);
+    }
+
+    public function testTimeoutWaitWontWaitPastIdleTimeout()
+    {
+        // set up amqp connection
+        $amqpConnection = $this->prepareAMQPConnection();
+        // set up amqp channel
+        $amqpChannel = $this->prepareAMQPChannel();
+        $amqpChannel->expects($this->atLeastOnce())
+            ->method('getChannelId')
+            ->with()
+            ->willReturn(true);
+        $amqpChannel->expects($this->once())
+            ->method('basic_consume')
+            ->withAnyParameters()
+            ->willReturn(true);
+
+        // set up consumer
+        $consumer = $this->getConsumer($amqpConnection, $amqpChannel);
+        // disable autosetup fabric so we do not mock more objects
+        $consumer->disableAutoSetupFabric();
+        $consumer->setChannel($amqpChannel);
+        $consumer->setTimeoutWait(20);
+        $consumer->setIdleTimeout(10);
+        $consumer->setIdleTimeoutExitCode(2);
+
+        $amqpChannel->callbacks = array('idle_timeout_test');
+
+        $amqpChannel->expects($this->once())
+            ->method('wait')
+            ->with(null, false, 10)
+            ->willReturnCallback(function ($allowedMethods, $nonBlocking, $waitTimeout) use ($consumer) {
+                // simulate time passing by moving the last activity date time
+                $consumer->setLastActivityDateTime(new \DateTime("-$waitTimeout seconds"));
+                throw new AMQPTimeoutException();
+            });
+
+        $this->assertEquals(2, $consumer->consume(1));
     }
 }

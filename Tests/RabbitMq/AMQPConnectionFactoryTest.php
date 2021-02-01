@@ -6,6 +6,7 @@ use OldSound\RabbitMqBundle\Provider\ConnectionParametersProviderInterface;
 use OldSound\RabbitMqBundle\RabbitMq\AMQPConnectionFactory;
 use OldSound\RabbitMqBundle\Tests\RabbitMq\Fixtures\AMQPConnection;
 use OldSound\RabbitMqBundle\Tests\RabbitMq\Fixtures\AMQPSocketConnection;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
 class AMQPConnectionFactoryTest extends TestCase
@@ -247,7 +248,7 @@ class AMQPConnectionFactoryTest extends TestCase
         $context = $instance->constructParams[11];
         // unset to check whole array at once later
         $instance->constructParams[11] = null;
-        $this->assertInternalType('resource', $context);
+        $this->assertIsResource($context);
         $this->assertEquals('stream-context', get_resource_type($context));
         $options = stream_context_get_options($context);
         $this->assertEquals(array('ssl' => array('verify_peer' => false)), $options);
@@ -335,7 +336,7 @@ class AMQPConnectionFactoryTest extends TestCase
     /**
      * Preparing ConnectionParametersProviderInterface instance
      *
-     * @return \PHPUnit_Framework_MockObject_MockObject|ConnectionParametersProviderInterface
+     * @return ConnectionParametersProviderInterface|MockObject
      */
     private function prepareConnectionParametersProvider()
     {
