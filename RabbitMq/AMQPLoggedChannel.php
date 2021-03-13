@@ -27,6 +27,26 @@ class AMQPLoggedChannel extends AMQPChannel
         parent::basic_publish($msg, $exchange, $routingKey, $mandatory, $immediate, $ticket);
     }
 
+    public function batch_basic_publish($msg, $exchange = '', $routingKey = '', $mandatory = false, $immediate = false, $ticket = NULL)
+    {
+        $this->basicPublishLog[] = array(
+            'msg'         => $msg,
+            'exchange'    => $exchange,
+            'routing_key' => $routingKey,
+            'mandatory'   => $mandatory,
+            'immediate'   => $immediate,
+            'ticket'      => $ticket
+        );
+
+        parent::batch_basic_publish($msg, $exchange, $routingKey, $mandatory, $immediate, $ticket);
+    }
+
+    public function publish_batch()
+    {
+        parent::publish_batch();
+    }
+
+
     public function getBasicPublishLog()
     {
         return $this->basicPublishLog;
